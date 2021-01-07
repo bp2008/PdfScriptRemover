@@ -89,21 +89,6 @@ namespace PdfScriptRemover
 
 					using (PdfDocument pdfDoc = new PdfDocument(reader, writer))
 					{
-						// Clean "Trailer"
-						CleanDictionary("Trailer", pdfDoc.GetTrailer());
-
-						// Clean "Outlines"
-						if (pdfDoc.HasOutlines())
-						{
-							PdfOutline outline = pdfDoc.GetOutlines(true);
-							CleanOutline(outline);
-						}
-
-						// Clean "Catalog" (document-level scripts)
-						PdfCatalog pdfCat = pdfDoc.GetCatalog();
-						PdfDictionary d = pdfCat.GetPdfObject().GetAsDictionary(PdfName.Names);
-						CleanDictionary("Catalog/Names", d);
-
 						// Clean pages
 						int pageCount = pdfDoc.GetNumberOfPages();
 						for (int i = 1; i <= pageCount; i++)
@@ -113,6 +98,21 @@ namespace PdfScriptRemover
 							CleanDictionary("Page " + i, pageDict);
 							CleanArray("Page " + i + " Kids", pageDict?.GetAsArray(PdfName.Kids));
 						}
+
+						// Clean "Catalog" (document-level scripts)
+						PdfCatalog pdfCat = pdfDoc.GetCatalog();
+						PdfDictionary d = pdfCat.GetPdfObject();
+						CleanDictionary("Catalog", d);
+
+						// Clean "Outlines"
+						if (pdfDoc.HasOutlines())
+						{
+							PdfOutline outline = pdfDoc.GetOutlines(true);
+							CleanOutline(outline);
+						}
+
+						// Clean "Trailer"
+						CleanDictionary("Trailer", pdfDoc.GetTrailer());
 					}
 				}
 
