@@ -13,11 +13,13 @@ namespace PdfScriptRemover
 	{
 		public static readonly Encoding Utf8NoBOM = new UTF8Encoding(false);
 
-		private static List<string> removedItems = new List<string>();
-		private static HashSet<PdfDictionary> traversed = new HashSet<PdfDictionary>();
+		private static List<string> removedItems;
+		private static HashSet<PdfDictionary> traversed;
 
 		static int Main(string[] args)
 		{
+			traversed = new HashSet<PdfDictionary>();
+			removedItems = new List<string>();
 			try
 			{
 				if (args.Length != 2)
@@ -26,7 +28,7 @@ namespace PdfScriptRemover
 					Console.WriteLine(" - powered by iText7 for .NET - ");
 					Console.WriteLine(" - licensed by GNU AFFERO GENERAL PUBLIC LICENSE - ");
 					Console.WriteLine();
-					Console.WriteLine("This program removes embedded JavaScript from a PDF file. ");
+					Console.WriteLine("This program removes embedded JavaScript and embedded or attached files from a PDF file. ");
 					Console.WriteLine();
 					Console.WriteLine("Usage: PdfScriptRemover.exe inputFile outputFile");
 					return 0;
