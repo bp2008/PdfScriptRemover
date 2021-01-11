@@ -28,7 +28,10 @@ namespace PdfScriptRemover
 					Console.WriteLine(" - powered by iText7 for .NET - ");
 					Console.WriteLine(" - licensed by GNU AFFERO GENERAL PUBLIC LICENSE - ");
 					Console.WriteLine();
-					Console.WriteLine("This program removes embedded JavaScript and embedded or attached files from a PDF file. ");
+					Console.WriteLine(
+						"This program reads a PDF file and removes embedded JavaScript " + Environment.NewLine
+						+ "  and embedded/attached files.  The output file is only " + Environment.NewLine
+						+ "  written if something is removed.");
 					Console.WriteLine();
 					Console.WriteLine("Usage: PdfScriptRemover.exe inputFile outputFile");
 					return 0;
@@ -43,7 +46,7 @@ namespace PdfScriptRemover
 					{
 						if (Directory.Exists(args[1]))
 						{
-							int retVal=0;
+							int retVal = 0;
 							foreach (FileInfo fi in diInputDir.GetFiles("*.pdf"))
 							{
 								int retValInner = Main(new string[] { fi.FullName.ToString(), args[1] });
@@ -82,37 +85,46 @@ namespace PdfScriptRemover
 
 				// Do the cleanup
 				using (PdfReader reader = new PdfReader(inputFile.FullName))
-				using (PdfWriter writer = new PdfWriter(outputFile.FullName))
+				using (MemoryStream msOut = new MemoryStream())
 				{
-					// Ignore permissions set by document author
-					reader.SetUnethicalReading(true);
-
-					using (PdfDocument pdfDoc = new PdfDocument(reader, writer))
+					using (PdfWriter writer = new PdfWriter(msOut))
 					{
-						// Clean pages
-						int pageCount = pdfDoc.GetNumberOfPages();
-						for (int i = 1; i <= pageCount; i++)
+						// Ignore permissions set by document author
+						reader.SetUnethicalReading(true);
+
+						using (PdfDocument pdfDoc = new PdfDocument(reader, writer))
 						{
-							PdfPage page = pdfDoc.GetPage(i);
-							PdfDictionary pageDict = page?.GetPdfObject();
-							CleanDictionary("Page " + i, pageDict);
-							CleanArray("Page " + i + " Kids", pageDict?.GetAsArray(PdfName.Kids));
+							// Clean pages
+							int pageCount = pdfDoc.GetNumberOfPages();
+							for (int i = 1; i <= pageCount; i++)
+							{
+								PdfPage page = pdfDoc.GetPage(i);
+								PdfDictionary pageDict = page?.GetPdfObject();
+								CleanDictionary("Page " + i, pageDict);
+								CleanArray("Page " + i + " Kids", pageDict?.GetAsArray(PdfName.Kids));
+							}
+
+							// Clean "Catalog" (document-level scripts)
+							PdfCatalog pdfCat = pdfDoc.GetCatalog();
+							PdfDictionary d = pdfCat.GetPdfObject();
+							CleanDictionary("Catalog", d);
+
+
+							// Clean "Outlines"
+							if (pdfDoc.HasOutlines())
+							{
+								PdfOutline outline = pdfDoc.GetOutlines(true);
+								CleanOutline(outline);
+							}
+
+							// Clean "Trailer"
+							CleanDictionary("Trailer", pdfDoc.GetTrailer());
 						}
-
-						// Clean "Catalog" (document-level scripts)
-						PdfCatalog pdfCat = pdfDoc.GetCatalog();
-						PdfDictionary d = pdfCat.GetPdfObject();
-						CleanDictionary("Catalog", d);
-
-						// Clean "Outlines"
-						if (pdfDoc.HasOutlines())
+						if (removedItems.Count > 0)
 						{
-							PdfOutline outline = pdfDoc.GetOutlines(true);
-							CleanOutline(outline);
+							using (FileStream fsOut = File.Create(outputFile.FullName))
+								msOut.WriteTo(fsOut);
 						}
-
-						// Clean "Trailer"
-						CleanDictionary("Trailer", pdfDoc.GetTrailer());
 					}
 				}
 
@@ -238,12 +250,13 @@ namespace PdfScriptRemover
 					removedItems.Add("(" + dictionaryLabel + ") " + key.ToString() + ": " + removed.ToString());
 			}
 		}
-#endregion
+		#endregion
 		#region Misc
 		private static void WriteLog(string input, string output, string text)
 		{
 			Console.Write(text);
 
+#if DEBUG
 			using (FileStream fs = new FileStream("log.txt", FileMode.Append, FileAccess.Write, FileShare.Read))
 			using (StreamWriter sw = new StreamWriter(fs, Utf8NoBOM))
 			{
@@ -252,6 +265,7 @@ namespace PdfScriptRemover
 				sw.WriteLine();
 				sw.WriteLine(text);
 			}
+#endif
 		}
 		#endregion
 	}
