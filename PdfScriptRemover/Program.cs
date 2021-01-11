@@ -89,6 +89,8 @@ namespace PdfScriptRemover
 				{
 					using (PdfWriter writer = new PdfWriter(msOut))
 					{
+						writer.SetCloseStream(false);
+
 						// Ignore permissions set by document author
 						reader.SetUnethicalReading(true);
 
@@ -120,11 +122,12 @@ namespace PdfScriptRemover
 							// Clean "Trailer"
 							CleanDictionary("Trailer", pdfDoc.GetTrailer());
 						}
-						if (removedItems.Count > 0)
-						{
-							using (FileStream fsOut = File.Create(outputFile.FullName))
-								msOut.WriteTo(fsOut);
-						}
+					}
+
+					if (removedItems.Count > 0)
+					{
+						using (FileStream fsOut = File.Create(outputFile.FullName))
+							msOut.WriteTo(fsOut);
 					}
 				}
 
