@@ -195,10 +195,10 @@ namespace PdfScriptRemover
 				{
 					RemoveDictionaryItem(dictionaryLabel + " > A", action, PdfName.F);
 					RemoveDictionaryItem(dictionaryLabel + " > A", action, PdfName.Win);
+					// The above was based on https://kb.itextpdf.com/home/it5kb/examples/itext-in-action-chapter-13-pdfs-inside-out#iTextinActionChapter13:PDFsinside-out-removelaunchactions
+					// But it seems like we should just remove this action altogether.
+					RemoveDictionaryItem(dictionaryLabel, d, PdfName.A);
 				}
-				// The above was based on https://kb.itextpdf.com/home/it5kb/examples/itext-in-action-chapter-13-pdfs-inside-out#iTextinActionChapter13:PDFsinside-out-removelaunchactions
-				// But it seems like we should just remove this action altogether.
-				RemoveDictionaryItem(dictionaryLabel, d, PdfName.A);
 			}
 
 			foreach (PdfName key in d.KeySet())
