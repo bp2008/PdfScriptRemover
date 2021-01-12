@@ -75,7 +75,7 @@ namespace PdfScriptRemover
 					return 1;
 				}
 
-				PdfCleaner cleaner = new PdfCleaner(inputFile.FullName, outputFile.FullName, str => Console.Write(str));
+				PdfCleaner cleaner = new PdfCleaner(inputFile.FullName, outputFile.FullName, str => Console.WriteLine(str));
 				cleaner.Clean();
 
 				return 0;
