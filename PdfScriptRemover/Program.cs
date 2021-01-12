@@ -1,5 +1,4 @@
-﻿using iText.Kernel.Pdf;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -11,29 +10,22 @@ namespace PdfScriptRemover
 {
 	class Program
 	{
-		public static readonly Encoding Utf8NoBOM = new UTF8Encoding(false);
-
-		private static List<string> removedItems;
-		private static HashSet<PdfDictionary> traversed;
-
 		static int Main(string[] args)
 		{
-			traversed = new HashSet<PdfDictionary>();
-			removedItems = new List<string>();
 			try
 			{
 				if (args.Length != 2)
 				{
-					Console.WriteLine("PdfScriptRemover " + Assembly.GetExecutingAssembly().GetName().Version.ToString());
-					Console.WriteLine(" - powered by iText7 for .NET - ");
-					Console.WriteLine(" - licensed by GNU AFFERO GENERAL PUBLIC LICENSE - ");
-					Console.WriteLine();
-					Console.WriteLine(
+					Console.Error.WriteLine("PdfScriptRemover " + Assembly.GetExecutingAssembly().GetName().Version.ToString());
+					Console.Error.WriteLine(" - powered by iText7 for .NET - ");
+					Console.Error.WriteLine(" - licensed by GNU AFFERO GENERAL PUBLIC LICENSE - ");
+					Console.Error.WriteLine();
+					Console.Error.WriteLine(
 						"This program reads a PDF file and removes embedded JavaScript " + Environment.NewLine
 						+ "  and embedded/attached files.  The output file is only " + Environment.NewLine
 						+ "  written if something is removed.");
-					Console.WriteLine();
-					Console.WriteLine("Usage: PdfScriptRemover.exe inputFile outputFile");
+					Console.Error.WriteLine();
+					Console.Error.WriteLine("Usage: PdfScriptRemover.exe inputFile outputFile");
 					return 0;
 				}
 
@@ -83,69 +75,15 @@ namespace PdfScriptRemover
 					return 1;
 				}
 
-				// Do the cleanup
-				using (PdfReader reader = new PdfReader(inputFile.FullName))
-				using (MemoryStream msOut = new MemoryStream())
-				{
-					using (PdfWriter writer = new PdfWriter(msOut))
-					{
-						writer.SetCloseStream(false);
+				PdfCleaner cleaner = new PdfCleaner(inputFile.FullName, outputFile.FullName, str => Console.Write(str));
+				cleaner.Clean();
 
-						// Ignore permissions set by document author
-						reader.SetUnethicalReading(true);
-
-						using (PdfDocument pdfDoc = new PdfDocument(reader, writer))
-						{
-							// Clean pages
-							int pageCount = pdfDoc.GetNumberOfPages();
-							for (int i = 1; i <= pageCount; i++)
-							{
-								PdfPage page = pdfDoc.GetPage(i);
-								PdfDictionary pageDict = page?.GetPdfObject();
-								CleanDictionary("Page " + i, pageDict);
-								CleanArray("Page " + i + " Kids", pageDict?.GetAsArray(PdfName.Kids));
-							}
-
-							// Clean "Catalog" (document-level scripts)
-							PdfCatalog pdfCat = pdfDoc.GetCatalog();
-							PdfDictionary d = pdfCat.GetPdfObject();
-							CleanDictionary("Catalog", d);
-
-
-							// Clean "Outlines"
-							if (pdfDoc.HasOutlines())
-							{
-								PdfOutline outline = pdfDoc.GetOutlines(true);
-								CleanOutline(outline);
-							}
-
-							// Clean "Trailer"
-							CleanDictionary("Trailer", pdfDoc.GetTrailer());
-						}
-					}
-
-					if (removedItems.Count > 0)
-					{
-						using (FileStream fsOut = File.Create(outputFile.FullName))
-							msOut.WriteTo(fsOut);
-					}
-				}
-
-
-				// Log and report what was removed
-				StringBuilder sb = new StringBuilder();
-				if (removedItems.Count == 0)
-				{
-					sb.AppendLine("Removed " + removedItems.Count + " items.");
-				}
-				else
-				{
-					sb.AppendLine("Removed " + removedItems.Count + " items:");
-					foreach (string item in removedItems)
-						sb.AppendLine(item);
-				}
-				WriteLog(inputFile.FullName, outputFile.FullName, sb.ToString());
 				return 0;
+			}
+			catch (Exception ex)
+			{
+				Console.Error.Write(ex.ToString());
+				return 1;
 			}
 			finally
 			{
@@ -157,119 +95,5 @@ namespace PdfScriptRemover
 				}
 			}
 		}
-		#region PDF Manipulation
-		private static void CleanOutline(PdfOutline outline)
-		{
-			if (outline == null)
-				return;
-			CleanDictionary("Outline " + outline.GetTitle(), outline.GetContent());
-			IList<PdfOutline> children = outline.GetAllChildren();
-			for (int i = 0; i < children.Count; i++)
-				CleanOutline(children[i]);
-		}
-
-		/// <summary>
-		/// Removes unwanted items from a PdfDictionary.
-		/// </summary>
-		/// <param name="d">dictionary</param>
-		public static void CleanDictionary(string dictionaryLabel, PdfDictionary d)
-		{
-			if (d == null)
-				return;
-			if (traversed.Contains(d))
-				return;
-			traversed.Add(d);
-
-			RemoveDictionaryItem(dictionaryLabel, d, PdfName.JavaScript);
-			RemoveDictionaryItem(dictionaryLabel, d, PdfName.JS);
-			RemoveDictionaryItem(dictionaryLabel, d, PdfName.AA);
-			RemoveDictionaryItem(dictionaryLabel, d, PdfName.OpenAction);
-			RemoveDictionaryItem(dictionaryLabel, d, PdfName.FileAttachment);
-			RemoveDictionaryItem(dictionaryLabel, d, PdfName.EmbeddedFile);
-			RemoveDictionaryItem(dictionaryLabel, d, PdfName.EmbeddedFiles);
-
-			PdfDictionary action = d.GetAsDictionary(PdfName.A);
-			if (action != null)
-			{
-				if (PdfName.Launch.Equals(action.GetAsName(PdfName.S)))
-				{
-					RemoveDictionaryItem(dictionaryLabel + " > A", action, PdfName.F);
-					RemoveDictionaryItem(dictionaryLabel + " > A", action, PdfName.Win);
-					// The above was based on https://kb.itextpdf.com/home/it5kb/examples/itext-in-action-chapter-13-pdfs-inside-out#iTextinActionChapter13:PDFsinside-out-removelaunchactions
-					// But it seems like we should just remove this action altogether.
-					RemoveDictionaryItem(dictionaryLabel, d, PdfName.A);
-				}
-			}
-
-			foreach (PdfName key in d.KeySet())
-			{
-				CleanObject(dictionaryLabel + " > " + key.ToString(), d.Get(key));
-			}
-		}
-
-		/// <summary>
-		/// Removes unwanted items from a PdfArray.
-		/// </summary>
-		/// <param name="a">array</param>
-		public static void CleanArray(string arrayLabel, PdfArray a)
-		{
-			if (a == null)
-				return;
-			for (int i = 0; i < a.Size(); i++)
-			{
-				CleanObject(arrayLabel + "[" + i + "]", a.Get(i));
-			}
-		}
-
-		private static void CleanObject(string objectLabel, PdfObject obj)
-		{
-			if (obj == null)
-				return;
-
-			if (obj is PdfIndirectReference)
-				obj = (obj as PdfIndirectReference).GetRefersTo(true);
-
-			if (obj is PdfDictionary)
-				CleanDictionary(objectLabel, obj as PdfDictionary);
-			else if (obj is PdfArray)
-				CleanArray(objectLabel, obj as PdfArray);
-		}
-
-		/// <summary>
-		/// Removes an item from a PdfDictionary, logging its removal in the removedItems list.
-		/// </summary>
-		/// <param name="d">dictionary</param>
-		/// <param name="key">key to remove</param>
-		public static void RemoveDictionaryItem(string dictionaryLabel, PdfDictionary d, PdfName key)
-		{
-			if (d == null)
-				return;
-			if (d.ContainsKey(key))
-			{
-				PdfObject removed = d.Remove(key);
-				if (removed == null)
-					removedItems.Add("(" + dictionaryLabel + ") " + key.ToString() + ": null");
-				else
-					removedItems.Add("(" + dictionaryLabel + ") " + key.ToString() + ": " + removed.ToString());
-			}
-		}
-		#endregion
-		#region Misc
-		private static void WriteLog(string input, string output, string text)
-		{
-			Console.Write(text);
-
-#if DEBUG
-			using (FileStream fs = new FileStream("log.txt", FileMode.Append, FileAccess.Write, FileShare.Read))
-			using (StreamWriter sw = new StreamWriter(fs, Utf8NoBOM))
-			{
-				sw.WriteLine();
-				sw.WriteLine(DateTime.Now.ToString() + ": " + input + " > " + output);
-				sw.WriteLine();
-				sw.WriteLine(text);
-			}
-#endif
-		}
-		#endregion
 	}
 }
